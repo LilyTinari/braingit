@@ -4,7 +4,7 @@ import { AskCard, CiCard, InboxCard, ReviewCard, SearchCard, TriageCard } from "
 
 function wantsIntro() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
-  if (sessionStorage.getItem("bg-intro")) return false;
+  if (sessionStorage.getItem("bg-intro-2")) return false;
   return true;
 }
 
@@ -42,10 +42,10 @@ export function Home({ onHub }: { onHub: () => void }) {
     }
     document.documentElement.classList.add("intro-lock");
     const done = () => {
-      sessionStorage.setItem("bg-intro", "1");
+      sessionStorage.setItem("bg-intro-2", "1");
       setIntro(false);
     };
-    const timer = window.setTimeout(done, 3200);
+    const timer = window.setTimeout(done, 3000);
     const skip = (event: KeyboardEvent) => {
       if (event.key === "Escape") done();
     };
@@ -62,14 +62,14 @@ export function Home({ onHub }: { onHub: () => void }) {
         className="wordmark"
         type="button"
         onClick={() => {
-          sessionStorage.setItem("bg-intro", "1");
+          sessionStorage.setItem("bg-intro-2", "1");
           setIntro(false);
         }}
         aria-label="Skip the opening"
       >
-        <strong>BrainGit</strong>
+        <strong>Skip</strong>
       </button>
-      <section className="story" ref={story} aria-label="A diff. Its lines gather into a brain. Drag sideways to turn it.">
+      <section className="story" ref={story} aria-label="A project is written, flows up into the brain, then a push and a pull. Drag sideways to turn it.">
         <div className="story-pin field">
           <RepoBrain className="field-brain" assembled={!play} hint soften />
           <div className="veil" />
