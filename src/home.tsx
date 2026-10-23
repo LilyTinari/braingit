@@ -4,7 +4,7 @@ import { AskCard, CiCard, InboxCard, ReviewCard, SearchCard, TriageCard } from "
 
 function wantsIntro() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
-  if (sessionStorage.getItem("bg-intro-3")) return false;
+  if (sessionStorage.getItem("bg-intro-4")) return false;
   return true;
 }
 
@@ -42,7 +42,7 @@ export function Home({ onHub }: { onHub: () => void }) {
     }
     document.documentElement.classList.add("intro-lock");
     const done = () => {
-      sessionStorage.setItem("bg-intro-3", "1");
+      sessionStorage.setItem("bg-intro-4", "1");
       setIntro(false);
     };
     const timer = window.setTimeout(done, 3200);
@@ -63,7 +63,7 @@ export function Home({ onHub }: { onHub: () => void }) {
         className="wordmark"
         type="button"
         onClick={() => {
-          sessionStorage.setItem("bg-intro-3", "1");
+          sessionStorage.setItem("bg-intro-4", "1");
           setIntro(false);
         }}
         aria-label="Skip the opening"

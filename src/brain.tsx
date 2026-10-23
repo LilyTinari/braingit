@@ -25,89 +25,6 @@ function fold(x: number, y: number, z: number): { p: [number, number, number]; r
   return { p: [px, py, pz], ridge };
 }
 
-const cortexVert = /* glsl */ `
-  attribute float aRidge;
-  uniform float uTime;
-  uniform float uEase;
-  varying float vRidge;
-  varying vec3 vN;
-  varying vec3 vWorld;
-  void main() {
-    vRidge = aRidge;
-    vec3 n = normalize(normal);
-    float breath = sin(uTime * 0.55 + position.y * 4.0) * 0.01 * uEase;
-    vec3 settled = position + n * breath;
-    vec3 origin = vec3(0.0, -1.16, 0.06);
-    vec3 p = mix(origin, settled, uEase);
-    vec4 world = modelMatrix * vec4(p, 1.0);
-    vWorld = world.xyz;
-    vN = normalize(normalMatrix * n);
-    gl_Position = projectionMatrix * viewMatrix * world;
-  }
-`;
-
-const cortexFrag = /* glsl */ `
-  uniform float uEase;
-  varying float vRidge;
-  varying vec3 vN;
-  varying vec3 vWorld;
-  void main() {
-    vec3 n = normalize(vN);
-    vec3 viewDir = normalize(cameraPosition - vWorld);
-    float fres = pow(1.0 - max(dot(n, viewDir), 0.0), 1.65);
-    float lamp = clamp(dot(n, normalize(vec3(-0.25, 0.8, 0.45))) * 0.55 + 0.45, 0.0, 1.0);
-    vec3 blue = vec3(0.16, 0.62, 0.72);
-    vec3 deep = vec3(0.01, 0.05, 0.07);
-    vec3 gold = vec3(0.95, 0.72, 0.28);
-    vec3 body = mix(deep, blue, lamp);
-    body = mix(body, gold, vRidge * lamp * 0.82);
-    vec3 rim = mix(blue, gold, vRidge);
-    vec3 col = body * 1.15 + rim * fres * (0.85 + vRidge);
-    float alpha = (0.18 + fres * 0.72 + vRidge * lamp * 0.28) * uEase;
-    gl_FragColor = vec4(col, alpha);
-  }
-`;
-
-const pointVert = /* glsl */ `
-  attribute float aSeed;
-  attribute float aGold;
-  uniform float uTime;
-  uniform float uEase;
-  uniform float uSoft;
-  varying float vAlpha;
-  varying float vGold;
-  void main() {
-    vGold = aGold;
-    float row = fract(aSeed * 13.0);
-    float indent = fract(aSeed * 7.0);
-    vec3 line = vec3(-0.7 + indent * 1.4, (row - 0.5) * 1.7, 0.0);
-    vec3 p = mix(line, position, uEase);
-    float pulse = 0.85 + 0.15 * sin(uTime * (0.4 + aSeed) + aSeed * 12.0);
-    vec4 mv = modelViewMatrix * vec4(p, 1.0);
-    gl_PointSize = clamp((1.6 + aGold * 2.8) * pulse * (170.0 / -mv.z), 1.0, 8.0);
-    gl_Position = projectionMatrix * mv;
-    float ndcY = gl_Position.y / gl_Position.w;
-    float low = smoothstep(0.15, -0.9, ndcY);
-    vAlpha = (0.35 + uEase * 0.65) * pulse * mix(1.0, 0.25, low * uSoft);
-  }
-`;
-
-const pointFrag = /* glsl */ `
-  varying float vAlpha;
-  varying float vGold;
-  void main() {
-    vec2 uv = gl_PointCoord * 2.0 - 1.0;
-    float r = dot(uv, uv);
-    if (r > 1.0) discard;
-    float core = exp(-r * 9.0);
-    float halo = exp(-r * 2.4);
-    vec3 blue = vec3(0.35, 0.82, 0.9);
-    vec3 gold = vec3(1.0, 0.82, 0.42);
-    vec3 col = mix(blue, gold, vGold);
-    gl_FragColor = vec4(col, (core * 0.9 + halo * 0.28) * vAlpha);
-  }
-`;
-
 const flowVert = /* glsl */ `
   attribute vec3 aFrom;
   attribute vec3 aTo;
@@ -196,61 +113,53 @@ export function RepoBrain({
     scene.add(group);
 
     const easeUniform = { value: assembled || still ? 1 : 0 };
-    const shell = new THREE.IcosahedronGeometry(1, 5);
-    const pos = shell.attributes.position as THREE.BufferAttribute;
-    const base = new Float32Array(pos.array);
-    const ridges = new Float32Array(pos.count);
-    for (let i = 0; i < pos.count; i++) {
-      const shaped = fold(base[i * 3]!, base[i * 3 + 1]!, base[i * 3 + 2]!);
-      pos.setXYZ(i, shaped.p[0], shaped.p[1], shaped.p[2]);
-      ridges[i] = shaped.ridge;
-    }
-    shell.setAttribute("aRidge", new THREE.BufferAttribute(ridges, 1));
-    shell.computeVertexNormals();
-    const shellMat = new THREE.ShaderMaterial({
-      vertexShader: cortexVert,
-      fragmentShader: cortexFrag,
-      side: THREE.FrontSide,
-      transparent: true,
-      depthWrite: false,
-      uniforms: {
-        uTime: { value: 0 },
-        uEase: easeUniform,
-      },
-    });
-    group.add(new THREE.Mesh(shell, shellMat));
+    const lobe = (i: number, total: number): [number, number, number] => {
+      const y = 1 - (i / Math.max(1, total - 1)) * 2;
+      const ring = Math.sqrt(Math.max(0, 1 - y * y));
+      const theta = i * 2.399963;
+      return fold(Math.cos(theta) * ring, y * 0.9, Math.sin(theta) * ring).p;
+    };
 
-    const n = Math.min(Math.round(count * 0.55), 700);
-    const positions = new Float32Array(n * 3);
-    const seeds = new Float32Array(n);
-    const golds = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
-      const src = (i * 17) % pos.count;
-      const shaped = fold(base[src * 3]!, base[src * 3 + 1]!, base[src * 3 + 2]!);
-      const lift = shaped.ridge > 0.45 ? 1.035 : 0.97;
-      positions[i * 3] = shaped.p[0] * lift;
-      positions[i * 3 + 1] = shaped.p[1] * lift;
-      positions[i * 3 + 2] = shaped.p[2] * lift;
-      seeds[i] = (i * 0.618) % 1;
-      golds[i] = shaped.ridge > 0.55 ? 1 : 0;
-    }
-    const pointsGeo = new THREE.BufferGeometry();
-    pointsGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    pointsGeo.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
-    pointsGeo.setAttribute("aGold", new THREE.BufferAttribute(golds, 1));
-    const pointMat = new THREE.ShaderMaterial({
-      vertexShader: pointVert,
-      fragmentShader: pointFrag,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      uniforms: {
-        uTime: { value: 0 },
-        uEase: easeUniform,
-        uSoft: { value: soften ? 1 : 0 },
-      },
-    });
-    group.add(new THREE.Points(pointsGeo, pointMat));
+    const rings = new THREE.Group();
+    const ringGeos: THREE.BufferGeometry[] = [];
+    const ringMats: THREE.Material[] = [];
+    const addRing = (rx: number, ry: number, tilt: number, color: number, nodes: number) => {
+      const linePos: number[] = [];
+      const nodePos: number[] = [];
+      const steps = 80;
+      const every = Math.max(1, Math.floor(steps / nodes));
+      for (let i = 0; i <= steps; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        const x = Math.cos(a) * rx;
+        const y = Math.sin(a) * ry;
+        const z = Math.sin(a * 2) * 0.28;
+        const cy = y * Math.cos(tilt) - z * Math.sin(tilt);
+        const cz = y * Math.sin(tilt) + z * Math.cos(tilt);
+        linePos.push(x, cy, cz);
+        if (i % every === 0) nodePos.push(x, cy, cz);
+      }
+      const lineGeo = new THREE.BufferGeometry();
+      lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(linePos, 3));
+      const lineMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.28 });
+      rings.add(new THREE.Line(lineGeo, lineMat));
+      const nodeGeo = new THREE.BufferGeometry();
+      nodeGeo.setAttribute("position", new THREE.Float32BufferAttribute(nodePos, 3));
+      const nodeMat = new THREE.PointsMaterial({
+        color,
+        size: 0.055,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        sizeAttenuation: true,
+      });
+      rings.add(new THREE.Points(nodeGeo, nodeMat));
+      ringGeos.push(lineGeo, nodeGeo);
+      ringMats.push(lineMat, nodeMat);
+    };
+    addRing(1.42, 1.05, 0.55, 0x3ecfc6, 16);
+    addRing(1.62, 1.22, -0.7, 0xe2b15a, 18);
+    addRing(1.15, 1.48, 1.15, 0x7ee7ef, 12);
+    group.add(rings);
 
     const playStory = !assembled && !still;
     const flowCount = 168;
@@ -259,9 +168,7 @@ export function RepoBrain({
     const starts = new Float32Array(flowCount);
     const durs = new Float32Array(flowCount);
     for (let i = 0; i < flowCount; i++) {
-      const src = (i * 29) % pos.count;
-      const shaped = fold(base[src * 3]!, base[src * 3 + 1]!, base[src * 3 + 2]!);
-      const brain = shaped.p;
+      const brain = lobe(i, flowCount);
       const fileX = -0.5 + ((i * 0.173) % 1) * 1.0;
       const fileY = -1.22 + (i % 6) * 0.042;
       const o = i * 3;
@@ -372,8 +279,6 @@ export function RepoBrain({
       flowMat.uniforms.uClock!.value = clock;
       fileMat.uniforms.uClock!.value = clock;
       const t = still ? 0 : now * 0.001;
-      shellMat.uniforms.uTime!.value = t;
-      pointMat.uniforms.uTime!.value = t;
       sheet.classList.toggle("playing", playStory && clock < 2.45);
       const note = caption.current;
       if (note) {
@@ -390,9 +295,11 @@ export function RepoBrain({
                   : "";
       }
       sheet.style.setProperty("--ease", ease.toFixed(3));
+      host.style.setProperty("--ease", ease.toFixed(3));
+      host.style.setProperty("--yaw", `${Math.sin(drag.x) * 14}deg`);
       const idle = !playStory || clock >= 2.45;
-      group.rotation.y += ((drag.x + (idle && !still ? now * 0.00006 : 0)) - group.rotation.y) * 0.12;
-      group.rotation.x += (drag.y - group.rotation.x) * 0.12;
+      rings.rotation.y += ((drag.x + (idle && !still ? t * 0.35 : 0)) - rings.rotation.y) * 0.12;
+      rings.rotation.x += (drag.y * 0.45 - rings.rotation.x) * 0.12;
       renderer.render(scene, camera);
       if (visible) frame = requestAnimationFrame(draw);
     };
@@ -444,14 +351,12 @@ export function RepoBrain({
       view.removeEventListener("pointerdown", onDown);
       view.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      shell.dispose();
-      pointsGeo.dispose();
       flowGeo.dispose();
       fileGeo.dispose();
-      shellMat.dispose();
-      pointMat.dispose();
+      for (const geo of ringGeos) geo.dispose();
       flowMat.dispose();
       fileMat.dispose();
+      for (const mat of ringMats) mat.dispose();
       renderer.dispose();
     };
   }, [assembled, count, soften]);
@@ -459,6 +364,7 @@ export function RepoBrain({
   return (
     <div className={className ?? "repo-brain"} ref={root}>
       <div className="repo" ref={repo}>
+        <img className="cortex-shot" src="/cortex.jpg" alt="" />
         <div className="repo-bar">
           <span className="branch">fix/stale-session</span>
           <span className="path">src/auth/session.ts</span>

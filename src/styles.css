@@ -345,7 +345,36 @@ html.intro-lock, html.intro-lock body { overflow: hidden; }
     var(--surface);
   border: 1px solid var(--line);
 }
-.repo-well .repo { top: 18px; width: min(78%, 280px); }
+.field-brain .repo,
+.repo-brain .repo {
+  top: 64px;
+  width: min(96vw, 72vh, 680px);
+  aspect-ratio: 1;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.cortex-shot {
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  top: 48%;
+  width: 92%;
+  height: auto;
+  transform: translate(-50%, -52%) rotateY(var(--yaw, 0deg));
+  opacity: var(--ease, 1);
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(circle at 50% 48%, #000 42%, transparent 74%);
+  mask-image: radial-gradient(circle at 50% 48%, #000 42%, transparent 74%);
+}
+.field-brain .repo-bar,
+.field-brain .gutter,
+.repo-well .repo-bar,
+.repo-well .gutter { display: none; }
+.field-brain .repo canvas,
+.repo-well .repo canvas { inset: 0; height: 100%; }
+.repo-well .repo { top: 8px; width: min(100%, 340px); }
+.repo canvas { z-index: 1; }
 .specimen {
   border: 1px solid var(--line);
   border-radius: 24px;
