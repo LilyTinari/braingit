@@ -372,6 +372,24 @@ export function RepoBrain({
         </div>
         <span className="gutter" />
         <canvas ref={canvas} aria-hidden="true" />
+        <div className="git-flow" aria-hidden="true">
+          <div className="lane push">
+            <span>push</span>
+            <svg viewBox="0 0 92 18">
+              <path d="M2 9 H90" />
+              <circle className="mover" r="2.4" />
+              <circle className="mover late" r="2" />
+            </svg>
+          </div>
+          <div className="lane pull">
+            <svg viewBox="0 0 92 18">
+              <path d="M2 9 H90" />
+              <circle className="mover" r="2.4" />
+              <circle className="mover late" r="2" />
+            </svg>
+            <span>pull</span>
+          </div>
+        </div>
         {!assembled ? <p className="flow-caption" ref={caption} /> : null}
         {hint ? (
           <p className="turn-hint">

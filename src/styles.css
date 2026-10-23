@@ -375,6 +375,47 @@ html.intro-lock, html.intro-lock body { overflow: hidden; }
 .repo-well .repo canvas { inset: 0; height: 100%; }
 .repo-well .repo { top: 8px; width: min(100%, 340px); }
 .repo canvas { z-index: 1; }
+.git-flow { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.repo-brain .git-flow { display: none; }
+.lane {
+  position: absolute;
+  top: 46%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f0e2c0;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.lane.push { left: 0; }
+.lane.pull { right: 0; }
+.lane svg { width: 74px; height: 16px; overflow: visible; }
+.lane path {
+  fill: none;
+  stroke: rgba(226, 177, 90, 0.55);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+.lane.pull path { stroke: rgba(62, 207, 198, 0.6); }
+.lane circle {
+  fill: #e2b15a;
+  offset-path: path("M2 9 H90");
+  -webkit-offset-path: path("M2 9 H90");
+  offset-distance: 0%;
+}
+.lane.pull circle { fill: #3ecfc6; }
+.lane .mover { animation: ride 1.7s linear infinite; }
+.lane .mover.late { animation-delay: -0.85s; opacity: 0.7; }
+@keyframes ride {
+  from { offset-distance: 0%; -webkit-offset-distance: 0%; }
+  to { offset-distance: 100%; -webkit-offset-distance: 100%; }
+}
+@media (max-width: 720px) {
+  .lane { top: 38%; }
+  .lane svg { width: 46px; }
+}
 .specimen {
   border: 1px solid var(--line);
   border-radius: 24px;
@@ -550,5 +591,5 @@ html.intro-lock, html.intro-lock body { overflow: hidden; }
   .wordmark { display: none; }
   .opening .nav, .opening .field-copy, .opening .top-line, .chapter { animation: none; opacity: 1; transform: none; }
   .motion .chapter, .motion .chapter.in { opacity: 1; transform: none; transition: none; }
-  .turn-hint .chev, .hint .chev { animation: none; }
+  .turn-hint .chev, .hint .chev, .lane .mover { animation: none; }
 }
