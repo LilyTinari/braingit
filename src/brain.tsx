@@ -59,10 +59,10 @@ const pointFrag = /* glsl */ `
     if (r > 1.0) discard;
     float core = exp(-r * 8.0);
     float halo = exp(-r * 2.2);
-    vec3 ivory = vec3(0.96, 0.96, 0.94);
-    vec3 neural = vec3(0.62, 0.82, 0.86);
+    vec3 ivory = vec3(0.98, 0.92, 0.74);
+    vec3 neural = vec3(0.78, 0.55, 0.16);
     vec3 col = mix(neural, ivory, core * mix(0.35, 0.85, vRind));
-    gl_FragColor = vec4(col, (core * 0.9 + halo * 0.35) * vAlpha);
+    gl_FragColor = vec4(col, (core * 0.62 + halo * 0.2) * vAlpha);
   }
 `;
 
@@ -170,7 +170,7 @@ export function RepoBrain({
     const tractGeo = new THREE.BufferGeometry();
     tractGeo.setAttribute("position", new THREE.Float32BufferAttribute(tractPos, 3));
     const tractMat = new THREE.LineBasicMaterial({
-      color: 0xc5e6f0,
+      color: 0xd4b06a,
       transparent: true,
       opacity: 0.28,
     });
@@ -212,6 +212,8 @@ export function RepoBrain({
       pointMat.uniforms.uTime!.value = still ? 0 : now * 0.001;
       tractMat.opacity = 0.3 * ease;
       sheet.style.setProperty("--ease", ease.toFixed(3));
+      host.style.setProperty("--ease", ease.toFixed(3));
+      host.style.setProperty("--yaw", `${(drag.x - 0.5) * 0.45}rad`);
       group.rotation.y += ((drag.x + (still ? 0 : now * 0.00008)) - group.rotation.y) * 0.12;
       group.rotation.x += (drag.y - group.rotation.x) * 0.12;
       renderer.render(scene, camera);
@@ -275,6 +277,7 @@ export function RepoBrain({
 
   return (
     <div className={className ?? "repo-brain"} ref={root}>
+      <img className="brain-plate" src="/gold-brain.jpg" alt="" />
       <div className="repo" ref={repo}>
         <div className="repo-bar">
           <span className="branch">fix/stale-session</span>
