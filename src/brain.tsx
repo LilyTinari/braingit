@@ -1,68 +1,99 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
-function cortex(x: number, y: number, z: number): [number, number, number] {
+function fold(x: number, y: number, z: number): { p: [number, number, number]; ridge: number } {
   const r = Math.hypot(x, y, z) || 1;
   const nx = x / r;
   const ny = y / r;
   const nz = z / r;
-  const theta = Math.atan2(nz, nx);
-  const phi = Math.acos(Math.max(-1, Math.min(1, ny)));
-  const g =
-    1 +
-    0.045 * Math.sin(theta * 5 + phi * 2) +
-    0.038 * Math.sin(phi * 4.5) +
-    0.02 * Math.sin(theta * 9 + phi * 3);
   const lobe = nx >= 0 ? 1 : -1;
+  const band = Math.sin(ny * 16 + nx * 2.4);
+  const cross = Math.sin(nz * 9 + nx * lobe * 4);
+  const ridge = Math.pow(Math.abs(band), 0.55) * (0.65 + 0.35 * Math.abs(cross));
+  const g = 1 + 0.05 * band + 0.022 * cross;
   let px = nx * 0.9 * g + lobe * 0.1;
-  let py = ny * 0.98 * g * (ny < -0.05 ? 0.84 : 1);
-  let pz = nz * 0.76 * g;
-  if (py < 0.08 && pz > 0.05) py -= 0.07;
-  const fiss = Math.exp(-px * px * 36) * 0.045;
+  let py = ny * 0.84 * g * (ny < -0.15 ? 0.9 : 1);
+  let pz = nz * 0.6 * g;
+  const fiss = Math.exp(-px * px * 55) * 0.06;
   px += Math.sign(px || lobe) * fiss;
-  py -= fiss * 0.35;
-  return [px, py, pz];
+  if (ny < -0.28 && nz > 0.05) {
+    const k = Math.min(1, (-0.28 - ny) * 2.2);
+    py -= 0.1 * k;
+    pz += 0.1 * k;
+    px *= 1 - 0.18 * k;
+  }
+  return { p: [px, py, pz], ridge };
 }
+
+const cortexVert = /* glsl */ `
+  attribute float aRidge;
+  uniform float uTime;
+  uniform float uEase;
+  varying float vRidge;
+  varying vec3 vN;
+  varying vec3 vWorld;
+  void main() {
+    vRidge = aRidge;
+    vec3 n = normalize(normal);
+    float breath = sin(uTime * 0.55 + position.y * 4.0) * 0.01 * uEase;
+    vec3 settled = position + n * breath;
+    vec3 line = vec3(position.x * 1.15, position.y, 0.0);
+    vec3 p = mix(line, settled, uEase);
+    vec4 world = modelMatrix * vec4(p, 1.0);
+    vWorld = world.xyz;
+    vN = normalize(normalMatrix * n);
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+
+const cortexFrag = /* glsl */ `
+  varying float vRidge;
+  varying vec3 vN;
+  varying vec3 vWorld;
+  void main() {
+    vec3 n = normalize(vN);
+    vec3 viewDir = normalize(cameraPosition - vWorld);
+    float fres = pow(1.0 - max(dot(n, viewDir), 0.0), 1.65);
+    float lamp = clamp(dot(n, normalize(vec3(-0.25, 0.8, 0.45))) * 0.55 + 0.45, 0.0, 1.0);
+    vec3 ink = vec3(0.035, 0.025, 0.015);
+    vec3 gold = vec3(0.83, 0.6, 0.24);
+    vec3 body = mix(ink, vec3(0.28, 0.17, 0.05), lamp);
+    body = mix(body, gold, vRidge * lamp * 0.8);
+    vec3 col = body + gold * fres * (0.25 + vRidge * 0.85);
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
 
 const pointVert = /* glsl */ `
   attribute float aSeed;
-  attribute float aRind;
   uniform float uTime;
   uniform float uEase;
   uniform float uSoft;
   varying float vAlpha;
-  varying float vRind;
   void main() {
-    vRind = aRind;
-    float row = fract(aSeed * 11.0);
-    float indent = fract(aSeed * 5.0);
-    vec3 line = vec3(-0.72 + indent * 1.35, (row - 0.5) * 2.05, 0.02);
+    float row = fract(aSeed * 13.0);
+    float indent = fract(aSeed * 7.0);
+    vec3 line = vec3(-0.7 + indent * 1.4, (row - 0.5) * 1.7, 0.0);
     vec3 p = mix(line, position, uEase);
-    float pulse = 0.9 + 0.1 * sin(uTime * (0.45 + aSeed) + aSeed * 14.0);
+    float pulse = 0.85 + 0.15 * sin(uTime * (0.4 + aSeed) + aSeed * 12.0);
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
-    float alpha = (0.45 + uEase * 0.55) * pulse * (aRind > 1.5 ? 0.55 : 1.0);
-    float size = aRind > 1.5 ? 34.0 : mix(3.4, 7.2, aRind);
-    gl_PointSize = clamp(size * pulse * (190.0 / -mv.z), 1.0, aRind > 1.5 ? 60.0 : 11.0);
+    gl_PointSize = clamp((2.2 + aSeed * 2.4) * pulse * (160.0 / -mv.z), 1.0, 7.0);
     gl_Position = projectionMatrix * mv;
     float ndcY = gl_Position.y / gl_Position.w;
-    float low = smoothstep(0.2, -0.95, ndcY);
-    vAlpha = alpha * mix(1.0, 0.22, low * uSoft);
+    float low = smoothstep(0.15, -0.9, ndcY);
+    vAlpha = (0.25 + uEase * 0.55) * pulse * mix(1.0, 0.2, low * uSoft);
   }
 `;
 
 const pointFrag = /* glsl */ `
   varying float vAlpha;
-  varying float vRind;
   void main() {
     vec2 uv = gl_PointCoord * 2.0 - 1.0;
     float r = dot(uv, uv);
     if (r > 1.0) discard;
-    float core = exp(-r * 8.0);
-    float halo = exp(-r * 2.2);
-    vec3 ivory = vec3(0.98, 0.92, 0.74);
-    vec3 neural = vec3(0.78, 0.55, 0.16);
-    vec3 col = mix(neural, ivory, core * mix(0.35, 0.85, vRind));
-    gl_FragColor = vec4(col, (core * 0.62 + halo * 0.2) * vAlpha);
+    float core = exp(-r * 10.0);
+    vec3 gold = vec3(0.93, 0.78, 0.42);
+    gl_FragColor = vec4(gold, core * vAlpha);
   }
 `;
 
@@ -97,43 +128,49 @@ export function RepoBrain({
     });
     renderer.setClearColor(0x000000, 0);
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
-    camera.position.z = 3.7;
+    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 20);
+    camera.position.z = 3.35;
     const group = new THREE.Group();
     scene.add(group);
 
     const easeUniform = { value: assembled || still ? 1 : 0 };
-    const n = Math.min(count, 1500);
-    const positions = new Float32Array((n + 2) * 3);
-    const seeds = new Float32Array(n + 2);
-    const rinds = new Float32Array(n + 2);
-    for (let i = 0; i < n; i++) {
-      const y = 1 - (i / (n - 1)) * 2;
-      const ring = Math.sqrt(Math.max(0, 1 - y * y));
-      const theta = i * 2.399963;
-      const rind = i % 5 === 0;
-      const p = cortex(Math.cos(theta) * ring, y, Math.sin(theta) * ring);
-      const depth = rind ? 1.02 : 0.9 + ((i * 0.17) % 1) * 0.08;
-      positions[i * 3] = p[0] * depth;
-      positions[i * 3 + 1] = p[1] * depth;
-      positions[i * 3 + 2] = p[2] * depth;
-      seeds[i] = (i * 0.618) % 1;
-      rinds[i] = rind ? 1 : 0;
+    const shell = new THREE.IcosahedronGeometry(1, 4);
+    const pos = shell.attributes.position as THREE.BufferAttribute;
+    const base = new Float32Array(pos.array);
+    const ridges = new Float32Array(pos.count);
+    for (let i = 0; i < pos.count; i++) {
+      const shaped = fold(base[i * 3]!, base[i * 3 + 1]!, base[i * 3 + 2]!);
+      pos.setXYZ(i, shaped.p[0], shaped.p[1], shaped.p[2]);
+      ridges[i] = shaped.ridge;
     }
-    positions[n * 3] = -0.42;
-    positions[n * 3 + 1] = 0.05;
-    positions[n * 3 + 2] = 0.1;
-    positions[(n + 1) * 3] = 0.42;
-    positions[(n + 1) * 3 + 1] = 0.05;
-    positions[(n + 1) * 3 + 2] = 0.1;
-    rinds[n] = 2;
-    rinds[n + 1] = 2;
-    seeds[n] = 0.2;
-    seeds[n + 1] = 0.8;
+    shell.setAttribute("aRidge", new THREE.BufferAttribute(ridges, 1));
+    shell.computeVertexNormals();
+    const shellMat = new THREE.ShaderMaterial({
+      vertexShader: cortexVert,
+      fragmentShader: cortexFrag,
+      side: THREE.FrontSide,
+      uniforms: {
+        uTime: { value: 0 },
+        uEase: easeUniform,
+      },
+    });
+    group.add(new THREE.Mesh(shell, shellMat));
+
+    const n = Math.min(Math.round(count * 0.28), 320);
+    const positions = new Float32Array(n * 3);
+    const seeds = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const src = (i * 17) % pos.count;
+      const shaped = fold(base[src * 3]!, base[src * 3 + 1]!, base[src * 3 + 2]!);
+      const lift = shaped.ridge > 0.45 ? 1.03 : 0.96;
+      positions[i * 3] = shaped.p[0] * lift;
+      positions[i * 3 + 1] = shaped.p[1] * lift;
+      positions[i * 3 + 2] = shaped.p[2] * lift;
+      seeds[i] = (i * 0.618) % 1;
+    }
     const pointsGeo = new THREE.BufferGeometry();
     pointsGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     pointsGeo.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
-    pointsGeo.setAttribute("aRind", new THREE.BufferAttribute(rinds, 1));
     const pointMat = new THREE.ShaderMaterial({
       vertexShader: pointVert,
       fragmentShader: pointFrag,
@@ -148,35 +185,7 @@ export function RepoBrain({
     });
     group.add(new THREE.Points(pointsGeo, pointMat));
 
-    const tractPos: number[] = [];
-    for (let t = 0; t < 16; t++) {
-      const a = (t * 53) % n;
-      const b = (t * 91 + 20) % n;
-      if (positions[a * 3]! * positions[b * 3]! > 0 && t % 2 === 0) continue;
-      for (let s = 0; s < 12; s++) {
-        const u0 = s / 12;
-        const u1 = (s + 1) / 12;
-        const lift = (u: number) => Math.sin(u * Math.PI) * 0.08;
-        tractPos.push(
-          positions[a * 3]! + (positions[b * 3]! - positions[a * 3]!) * u0,
-          positions[a * 3 + 1]! + (positions[b * 3 + 1]! - positions[a * 3 + 1]!) * u0 + lift(u0),
-          positions[a * 3 + 2]! + (positions[b * 3 + 2]! - positions[a * 3 + 2]!) * u0,
-          positions[a * 3]! + (positions[b * 3]! - positions[a * 3]!) * u1,
-          positions[a * 3 + 1]! + (positions[b * 3 + 1]! - positions[a * 3 + 1]!) * u1 + lift(u1),
-          positions[a * 3 + 2]! + (positions[b * 3 + 2]! - positions[a * 3 + 2]!) * u1,
-        );
-      }
-    }
-    const tractGeo = new THREE.BufferGeometry();
-    tractGeo.setAttribute("position", new THREE.Float32BufferAttribute(tractPos, 3));
-    const tractMat = new THREE.LineBasicMaterial({
-      color: 0xd4b06a,
-      transparent: true,
-      opacity: 0.28,
-    });
-    group.add(new THREE.LineSegments(tractGeo, tractMat));
-
-    const drag = { x: 0.5, y: 0.12 };
+    const drag = { x: 0.35, y: 0.08 };
     const born = performance.now();
     let alive = true;
     let frame = 0;
@@ -189,7 +198,7 @@ export function RepoBrain({
       const w = view.clientWidth;
       const h = view.clientHeight;
       if (w < 2 || h < 2) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, w < 700 ? 1.5 : 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, w < 700 ? 1.5 : 1.75);
       renderer.setPixelRatio(dpr);
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
@@ -209,12 +218,11 @@ export function RepoBrain({
       const raw = still || assembled ? 1 : Math.min(1, Math.max(0, (now - born - 600) / 1800));
       const ease = raw * raw * (3 - 2 * raw);
       easeUniform.value = ease;
-      pointMat.uniforms.uTime!.value = still ? 0 : now * 0.001;
-      tractMat.opacity = 0.3 * ease;
+      const t = still ? 0 : now * 0.001;
+      shellMat.uniforms.uTime!.value = t;
+      pointMat.uniforms.uTime!.value = t;
       sheet.style.setProperty("--ease", ease.toFixed(3));
-      host.style.setProperty("--ease", ease.toFixed(3));
-      host.style.setProperty("--yaw", `${(drag.x - 0.5) * 0.45}rad`);
-      group.rotation.y += ((drag.x + (still ? 0 : now * 0.00008)) - group.rotation.y) * 0.12;
+      group.rotation.y += ((drag.x + (still ? 0 : now * 0.00006)) - group.rotation.y) * 0.12;
       group.rotation.x += (drag.y - group.rotation.x) * 0.12;
       renderer.render(scene, camera);
       if (visible) frame = requestAnimationFrame(draw);
@@ -247,7 +255,7 @@ export function RepoBrain({
       if (axis !== "x") return;
       drag.x = origin.yaw + dx * 0.008;
       if (event.pointerType !== "touch") {
-        drag.y = Math.max(-0.55, Math.min(0.55, origin.pitch + dy * 0.003));
+        drag.y = Math.max(-0.45, Math.min(0.45, origin.pitch + dy * 0.003));
       }
     };
     const onUp = () => {
@@ -267,17 +275,16 @@ export function RepoBrain({
       view.removeEventListener("pointerdown", onDown);
       view.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      shell.dispose();
       pointsGeo.dispose();
-      tractGeo.dispose();
+      shellMat.dispose();
       pointMat.dispose();
-      tractMat.dispose();
       renderer.dispose();
     };
   }, [assembled, count, soften]);
 
   return (
     <div className={className ?? "repo-brain"} ref={root}>
-      <img className="brain-plate" src="/gold-brain.jpg" alt="" />
       <div className="repo" ref={repo}>
         <div className="repo-bar">
           <span className="branch">fix/stale-session</span>
