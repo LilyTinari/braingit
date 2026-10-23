@@ -111,8 +111,8 @@ h1 em { font-style: italic; color: var(--neural); }
   aspect-ratio: 1 / 1.12;
   transform: translateX(-50%);
   border-radius: 16px;
-  border: 1px solid rgba(212, 176, 106, 0.42);
-  background: rgba(7, 6, 4, 0.72);
+  border: 1px solid rgba(120, 190, 200, 0.35);
+  background: rgba(0, 0, 0, 0.55);
   overflow: hidden;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
   touch-action: pan-y;
@@ -281,6 +281,20 @@ h1 em { font-style: italic; color: var(--neural); }
   pointer-events: none;
 }
 .flow-caption:empty { display: none; }
+.curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: #000;
+  pointer-events: none;
+  opacity: 0;
+}
+.opening .curtain { opacity: 1; animation: lift 0.95s cubic-bezier(0.22, 1, 0.36, 1) 0.5s forwards; }
+.opened .curtain { display: none; }
+@keyframes lift {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 .wordmark {
   position: fixed;
   left: 50%;

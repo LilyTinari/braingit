@@ -4,7 +4,7 @@ import { AskCard, CiCard, InboxCard, ReviewCard, SearchCard, TriageCard } from "
 
 function wantsIntro() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
-  if (sessionStorage.getItem("bg-intro-2")) return false;
+  if (sessionStorage.getItem("bg-intro-3")) return false;
   return true;
 }
 
@@ -42,10 +42,10 @@ export function Home({ onHub }: { onHub: () => void }) {
     }
     document.documentElement.classList.add("intro-lock");
     const done = () => {
-      sessionStorage.setItem("bg-intro-2", "1");
+      sessionStorage.setItem("bg-intro-3", "1");
       setIntro(false);
     };
-    const timer = window.setTimeout(done, 3000);
+    const timer = window.setTimeout(done, 3200);
     const skip = (event: KeyboardEvent) => {
       if (event.key === "Escape") done();
     };
@@ -58,11 +58,12 @@ export function Home({ onHub }: { onHub: () => void }) {
 
   return (
     <div>
+      <div className="curtain" aria-hidden="true" />
       <button
         className="wordmark"
         type="button"
         onClick={() => {
-          sessionStorage.setItem("bg-intro-2", "1");
+          sessionStorage.setItem("bg-intro-3", "1");
           setIntro(false);
         }}
         aria-label="Skip the opening"
